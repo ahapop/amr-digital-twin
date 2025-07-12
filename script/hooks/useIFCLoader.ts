@@ -1,0 +1,1 @@
+// Add useIFCLoader from artifacts
