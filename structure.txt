@@ -1,0 +1,72 @@
+amr-digital-twin/
+├── .env.local
+├── .gitattributes
+├── .gitignore
+├── Dev Run.bat
+├── ListFolder.py
+├── README.md
+├── SQL.txt
+├── app/
+│   ├── api/
+│   │   ├── blacklist/
+│   │   │   └── route.ts
+│   │   ├── delete-preset-from-db/
+│   │   │   └── route.ts
+│   │   ├── get-bim-by-id/
+│   │   │   └── route.ts
+│   │   ├── get-preset-by-index/
+│   │   │   └── route.ts
+│   │   ├── get-preset-count/
+│   │   │   └── route.ts
+│   │   ├── get-presets-by-model/
+│   │   │   └── route.ts
+│   │   ├── save-preset-to-db/
+│   │   │   └── route.ts
+│   │   ├── test-preset-connection/
+│   │   │   └── route.ts
+│   │   └── update-preset-label/
+│   │       └── route.ts
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   ├── BimPanel.tsx
+│   ├── ContextMenu.tsx
+│   ├── ModelLoadingOverlay.tsx
+│   ├── PresetBox.tsx
+│   ├── SidePanel.tsx
+│   ├── ThreeScene.tsx
+│   ├── TopBar.tsx
+│   └── patch.txt
+├── envlocal.txt
+├── eslint.config.mjs
+├── hooks/
+│   ├── useMQTT.ts
+│   └── useThreeScene.ts
+├── lib/
+│   ├── constants.ts
+│   ├── presetApi.ts
+│   └── store.ts
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public/
+│   ├── images/
+│   │   ├── 53ff8457-10a2-4a7b-9433-5a0ed3898e09.png
+│   │   ├── amr-seamless-solution-logo.png
+│   │   └── amr-seamless-solution-logo_gold.png
+│   ├── libs/
+│   │   └── web-ifc/
+│   │       └── web-ifc.wasm
+│   └── model3d/
+│       ├── ground.ifc
+│       ├── machine.ifc
+│       ├── main.ifc
+│       ├── second.ifc
+│       └── third.ifc
+├── structure.txt
+├── tsconfig.json
+└── yarn.lock

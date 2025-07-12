@@ -1,0 +1,40 @@
+{
+  "name": "amr-digital-twin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
+    "@types/three": "^0.178.1",
+    "mqtt": "5.13.1",
+    "next": "15.3.4",
+    "pg": "^8.16.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "three": "0.149.0",
+    "three-stdlib": "2.36.0",
+    "three.meshline": "^1.4.0",
+    "web-ifc": "0.0.43",
+    "web-ifc-three": "0.0.126",
+    "yarn": "^1.22.22",
+    "zustand": "5.0.6"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3",
+    "@tailwindcss/postcss": "4",
+    "@types/node": "20.19.4",
+    "@types/pg": "^8.15.4",
+    "@types/react": "19",
+    "@types/react-dom": "19",
+    "copy-webpack-plugin": "^13.0.0",
+    "eslint": "9",
+    "eslint-config-next": "15.3.4",
+    "tailwindcss": "4",
+    "typescript": "5"
+  }
+}

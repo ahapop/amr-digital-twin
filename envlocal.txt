@@ -1,0 +1,5 @@
+PGHOST=localhost
+PGUSER=postgres
+PGDATABASE=bimdb
+PGPASSWORD=root
+PGPORT=5432

@@ -1,0 +1,134 @@
+-- Database: bimdb
+
+-- DROP DATABASE IF EXISTS bimdb;
+
+CREATE DATABASE bimdb
+    WITH
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'English_United States.utf8'
+    LC_CTYPE = 'English_United States.utf8'
+    LOCALE_PROVIDER = 'libc'
+    TABLESPACE = pg_default
+    CONNECTION LIMIT = -1
+    IS_TEMPLATE = False;
+	
+	
+	-- Table: public.ground_preset
+
+-- DROP TABLE IF EXISTS public.ground_preset;
+
+CREATE TABLE IF NOT EXISTS public.ground_preset
+(
+    id integer NOT NULL DEFAULT nextval('ground_preset_id_seq'::regclass),
+    label text COLLATE pg_catalog."default",
+    position_x double precision,
+    position_y double precision,
+    position_z double precision,
+    target_x double precision,
+    target_y double precision,
+    target_z double precision,
+    zoom double precision,
+    CONSTRAINT ground_preset_pkey PRIMARY KEY (id)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.ground_preset
+    OWNER to postgres;
+	
+	
+	
+-- Table: public.machine_preset
+
+-- DROP TABLE IF EXISTS public.machine_preset;
+
+CREATE TABLE IF NOT EXISTS public.machine_preset
+(
+    id integer NOT NULL DEFAULT nextval('machine_preset_id_seq'::regclass),
+    label text COLLATE pg_catalog."default",
+    position_x double precision,
+    position_y double precision,
+    position_z double precision,
+    target_x double precision,
+    target_y double precision,
+    target_z double precision,
+    zoom double precision,
+    CONSTRAINT machine_preset_pkey PRIMARY KEY (id)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.machine_preset
+    OWNER to postgres;
+	
+	
+	
+-- Table: public.main_preset
+
+-- DROP TABLE IF EXISTS public.main_preset;
+
+CREATE TABLE IF NOT EXISTS public.main_preset
+(
+    id integer NOT NULL DEFAULT nextval('main_preset_id_seq'::regclass),
+    label text COLLATE pg_catalog."default",
+    position_x double precision,
+    position_y double precision,
+    position_z double precision,
+    target_x double precision,
+    target_y double precision,
+    target_z double precision,
+    zoom double precision,
+    CONSTRAINT main_preset_pkey PRIMARY KEY (id)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.main_preset
+    OWNER to postgres;
+	
+-- Table: public.second_preset
+
+-- DROP TABLE IF EXISTS public.second_preset;
+
+CREATE TABLE IF NOT EXISTS public.second_preset
+(
+    id integer NOT NULL DEFAULT nextval('second_preset_id_seq'::regclass),
+    label text COLLATE pg_catalog."default",
+    position_x double precision,
+    position_y double precision,
+    position_z double precision,
+    target_x double precision,
+    target_y double precision,
+    target_z double precision,
+    zoom double precision,
+    CONSTRAINT second_preset_pkey PRIMARY KEY (id)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.second_preset
+    OWNER to postgres;
+	
+-- Table: public.third_preset
+
+-- DROP TABLE IF EXISTS public.third_preset;
+
+CREATE TABLE IF NOT EXISTS public.third_preset
+(
+    id integer NOT NULL DEFAULT nextval('third_preset_id_seq'::regclass),
+    label text COLLATE pg_catalog."default",
+    position_x double precision,
+    position_y double precision,
+    position_z double precision,
+    target_x double precision,
+    target_y double precision,
+    target_z double precision,
+    zoom double precision,
+    CONSTRAINT third_preset_pkey PRIMARY KEY (id)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.third_preset
+    OWNER to postgres;

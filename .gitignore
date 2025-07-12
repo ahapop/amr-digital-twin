@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Local environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+public/model3d/ground.ifc
+public/model3d/machine.ifc
+public/model3d/main.ifc
+public/model3d/second.ifc
+public/model3d/third.ifc

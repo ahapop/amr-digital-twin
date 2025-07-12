@@ -1,0 +1,270 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --presetW: 150px;
+  --presetH: 30px;
+  --presetFont: 15px;
+  --presetBg: #343063;
+  --presetClr: #d9d9ff;
+  --presetBorder: #6c63ff;
+  --presetActiveBg: #6c63ff;
+  --presetCurBg: #28a745;
+  --presetResetBg: #d34747;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+.side-panel {
+  position: fixed;
+  left: 0;
+  top: 60px;
+  z-index: 1100;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 14px 20px 14px 16px;
+  border-radius: 0 9px 9px 0;
+  box-shadow: 0 2px 18px #0008;
+  font-size: 10.5px;
+  user-select: none;
+  width: calc(var(--btnW) + 40px);
+  transform: translateX(calc(-100% - 20px));
+  transition: transform 0.3s ease;
+}
+
+.side-panel.shown {
+  transform: translateX(0);
+}
+
+.unhide-btn {
+  font-size: 15px;
+  font-weight: bold;
+  height: 34px;
+  line-height: 34px;
+  padding: 0 16px;
+  background: rgba(144, 238, 144, 0.9);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.unhide-btn:hover {
+  background: rgba(238, 144, 144, 0.848);
+}
+
+.unhide-btn.active {
+  background: #1e90ff;
+  color: #fff;
+}
+
+.label-title {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: #aaa;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.toggle-btn,
+#clear-btn {
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 10px 14px;
+  width: var(--btnW);
+  font-size: 14px;
+  outline: none;
+  border: 1.8px solid;
+  box-shadow: 0 1px 4px #0003;
+  transition: 0.18s;
+  background: #222;
+  color: #bbb;
+  text-align: center;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.toggle-btn.active {
+  background: #1e90ff;
+  color: #fff;
+  border-color: #1e90ff;
+  font-weight: bold;
+}
+
+.toggle-btn:hover:not(.active) {
+  background: #2a3b53;
+  color: #fff;
+}
+
+#clear-btn {
+  background: #d34747;
+  color: #fff;
+  border-color: #d34747;
+  font-weight: bold;
+}
+
+#clear-btn:hover {
+  background: #b21d1d;
+}
+
+.model-btn {
+  width: var(--btnW);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #444444;
+  border: none;
+  color: #eee;
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 1px 4px #0006;
+  transition: 0.18s;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.model-btn:last-child {
+  margin-bottom: 0;
+}
+
+.model-btn.active {
+  background: #ffa502;
+  color: #000;
+  font-weight: bold;
+}
+
+.model-btn:hover:not(.active) {
+  background: #666;
+}
+
+.preset-btn {
+  width: var(--presetW);
+  height: var(--presetH);
+  padding: 0 20px;
+  font-size: var(--presetFont);
+  font-family: inherit;
+  border-radius: 14px;
+  border: 2px solid var(--presetBorder);
+  background: var(--presetBg);
+  color: var(--presetClr);
+  cursor: pointer;
+  transition: 0.18s;
+  text-align: center;
+  box-shadow: 0 1px 4px #0004;
+}
+
+.preset-btn.active {
+  background: var(--presetActiveBg);
+  border-color: var(--presetActiveBg);
+  color: #fff;
+}
+
+.preset-btn.current {
+  background: var(--presetCurBg) !important;
+  border-color: var(--presetCurBg) !important;
+  color: #fff !important;
+}
+
+.preset-btn.resetting {
+  background: var(--presetResetBg) !important;
+  border-color: var(--presetResetBg) !important;
+  color: #fff !important;
+}
+
+.preset-btn:hover:not(.active):not(.resetting) {
+  background: #47437c;
+  color: #fff;
+}
+
+.preset-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 24px;
+  background: #d34747;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.preset-close:hover {
+  background: #b21d1d;
+}
+
+#preset-area {
+  padding: 14px 20px 18px;
+  display: inline-grid;
+  gap: 8px;
+  grid-template-rows: repeat(10, var(--presetH));
+  grid-auto-flow: column;
+  grid-auto-columns: var(--presetW);
+}
+
+#btn-hide-resets {
+  width: var(--presetW);
+  height: var(--presetH);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--presetResetBg);
+  border: 2px solid var(--presetResetBg);
+  color: #fff;
+  font-size: calc(var(--presetFont) + 1px);
+}
+
+#btn-hide-resets:hover {
+  background: #b21d1d;
+}
+
+.multiInfoBox {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 14px;
+  white-space: pre-wrap;
+  max-width: 320px;
+  z-index: 1090;
+  pointer-events: none;
+  box-shadow: 0 2px 18px #000b;
+  transition: left 0.2s, top 0.2s;
+}
+
+.multi-connector {
+  stroke: #f00;
+  stroke-width: 2;
+  opacity: 0.7;
+  display: none;
+}
+
+.bim-line {
+  margin-bottom: 7px;
+  font-family: monospace;
+}
+
+.hidden {
+  display: none !important;
+}

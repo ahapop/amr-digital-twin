@@ -1,0 +1,822 @@
+"use client";
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useCallback,
+} from "react";
+import * as THREE from "three";
+import { IFCLoader } from "web-ifc-three/IFCLoader";
+import { OrbitControls, Line2, LineGeometry, LineMaterial } from "three-stdlib";
+import { PresetAPI, PresetData } from "@/lib/presetApi";
+import { useAppStore } from "@/lib/store";
+import { MODELS } from "@/lib/constants";
+import ContextMenu from "@/components/ContextMenu";
+
+type InfoPos = { x: number; y: number; z: number };
+
+const ZOOM_FACTOR_TARGET = 3;
+const LOGO_URL = "/images/amr-seamless-solution-logo_gold.png";
+const DEFAULT_PRESET_INDEX = 0;
+
+interface ContextMenuState {
+  show: boolean;
+  x: number;
+  y: number;
+  expressID: number | null;
+  name: string | null;
+}
+
+interface ThreeSceneProps {
+  onPresetSaved?: (index: number, preset: PresetData) => void;
+  onPresetLoaded?: (index: number, preset: PresetData) => void;
+  onPresetDeleted?: (index: number) => void;
+  onPresetsLoaded?: (presets: (PresetData | null)[]) => void;
+}
+
+const ThreeScene: React.FC<ThreeSceneProps> = ({
+  onPresetSaved,
+  onPresetLoaded,
+  onPresetDeleted,
+  onPresetsLoaded,
+}) => {
+  const {
+    setSelectedIDs,
+    setCurrentModelKey,
+    currentModelKey,
+    bimBoxEnabled,
+    setBimPanelData,
+    bimPanelData,
+    setModelLoading,
+  } = useAppStore();
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const [modelLoaded, setModelLoaded] = useState(false);
+  const [singleInfo, setSingleInfo] = useState<{
+    show: boolean;
+    pos: InfoPos | null;
+    expressID: number | null;
+    name: string | null;
+    name2?: string | null;
+  }>({ show: false, pos: null, expressID: null, name: null, name2: null });
+
+  const [hoverID, setHoverID] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    show: false,
+    x: 0,
+    y: 0,
+    expressID: null,
+    name: null,
+  });
+  const [blacklist, setBlacklist] = useState<Set<number>>(new Set());
+  const [blacklistLoaded, setBlacklistLoaded] = useState(false); // เพิ่ม state
+  const [hiddenObjects, setHiddenObjects] = useState<Set<number>>(new Set());
+
+  const infoBoxRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const lineRef = useRef<SVGLineElement>(null);
+
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const ifcModelRef = useRef<THREE.Object3D | null>(null);
+  const ifcLoaderRef = useRef<IFCLoader | null>(null);
+
+  const hoverSubsetRef = useRef<THREE.Mesh | null>(null);
+
+  const centroidCache = useRef<Map<number, THREE.Vector3>>(new Map());
+  const topPointCache = useRef<Map<number, THREE.Vector3>>(new Map());
+
+  const boundaryBoxLineRef = useRef<THREE.Object3D[] | null>(null);
+  const centerLineRef = useRef<THREE.Object3D | null>(null);
+
+  const initialDistanceRef = useRef<number | null>(null);
+  const lastLoggedZoomRef = useRef<number | null>(null);
+
+  const [modelName, setModelName] = useState<string>(
+    currentModelKey || MODELS[0].key
+  );
+  const [pendingPresetIdx, setPendingPresetIdx] = useState<number | null>(null);
+  const [pendingModelKey, setPendingModelKey] = useState<string | null>(null);
+
+  const ifcLoaderCache = useRef<Map<string, THREE.Object3D>>(new Map());
+  const presetCache = useRef<Map<string, (PresetData | null)[]>>(new Map());
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const loadIFCModelRef = useRef<any>(null);
+
+  // Load blacklist from API
+  const loadBlacklist = useCallback(async () => {
+    try {
+      const response = await fetch("/api/blacklist");
+      if (response.ok) {
+        const blacklistArray = await response.json();
+        setBlacklist(new Set(blacklistArray));
+        setBlacklistLoaded(true); // เพิ่มบรรทัดนี้
+      }
+    } catch (error) {
+      setBlacklistLoaded(true); // แม้จะ fail ก็ควร set ให้ไม่ค้าง
+      console.error("Failed to load blacklist:", error);
+    }
+  }, []);
+
+  // Add to blacklist - เพิ่มเข้า blacklist เท่านั้น ไม่ซ่อน
+  const addToBlacklist = useCallback(
+    async (expressID: number, modelname: string, subobject_name: string) => {
+      try {
+        const response = await fetch("/api/blacklist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expressID, modelname, subobject_name }),
+        });
+        if (response.ok) {
+          setBlacklist((prev) => new Set([...prev, expressID]));
+
+          if (hoverSubsetRef.current && sceneRef.current) {
+            safeRemoveSubset(hoverSubsetRef.current, sceneRef.current);
+            hoverSubsetRef.current = null;
+          }
+
+          setSingleInfo((prev) => {
+            if (prev.expressID === expressID) {
+              if (boundaryBoxLineRef.current && sceneRef.current) {
+                boundaryBoxLineRef.current.forEach((obj) => {
+                  sceneRef.current?.remove(obj);
+                });
+                boundaryBoxLineRef.current = null;
+              }
+              if (centerLineRef.current && sceneRef.current) {
+                sceneRef.current.remove(centerLineRef.current);
+                centerLineRef.current = null;
+              }
+              setHoverID(null);
+              setBimPanelData(null);
+
+              return {
+                show: false,
+                pos: null,
+                expressID: null,
+                name: null,
+                name2: null,
+              };
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error("Failed to add to blacklist:", error);
+      }
+    },
+    [setBimPanelData]
+  );
+
+  // Hidden subsets storage
+  const hiddenSubsetsRef = useRef<Map<number, THREE.Mesh>>(new Map());
+
+  // Hide object function - ซ่อนเฉพาะ object ที่เลือก
+  const hideObject = useCallback((expressID: number) => {
+    if (
+      !ifcLoaderRef.current?.ifcManager ||
+      !sceneRef.current ||
+      expressID === 0
+    )
+      return;
+
+    try {
+      setHiddenObjects((prev) => new Set([...prev, expressID]));
+
+      if (hoverSubsetRef.current && sceneRef.current) {
+        safeRemoveSubset(hoverSubsetRef.current, sceneRef.current);
+        hoverSubsetRef.current = null;
+      }
+
+      const hiddenSubset = ifcLoaderRef.current.ifcManager.createSubset({
+        modelID: 0,
+        ids: [expressID],
+        scene: sceneRef.current,
+        removePrevious: false,
+        customID: `hidden-${expressID}`,
+        material: new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          visible: false,
+        }),
+      });
+
+      if (hiddenSubset) {
+        hiddenSubsetsRef.current.set(expressID, hiddenSubset as THREE.Mesh);
+        sceneRef.current.remove(hiddenSubset);
+      }
+    } catch (error) {
+      console.error("Error hiding object:", error);
+    }
+  }, []);
+
+  // Unselect function
+  const unselectObject = useCallback(() => {
+    setSingleInfo({
+      show: false,
+      pos: null,
+      expressID: null,
+      name: null,
+      name2: null,
+    });
+
+    if (boundaryBoxLineRef.current && sceneRef.current) {
+      boundaryBoxLineRef.current.forEach((obj) => {
+        sceneRef.current?.remove(obj);
+      });
+      boundaryBoxLineRef.current = null;
+    }
+    if (centerLineRef.current && sceneRef.current) {
+      sceneRef.current.remove(centerLineRef.current);
+      centerLineRef.current = null;
+    }
+
+    setHoverID(null);
+    setBimPanelData(null);
+  }, [setBimPanelData]);
+
+  const showHiddenObject = useCallback((expressID: number) => {
+    if (!sceneRef.current) return;
+
+    setHiddenObjects((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(expressID);
+      return newSet;
+    });
+
+    const hiddenSubset = hiddenSubsetsRef.current.get(expressID);
+    if (hiddenSubset) {
+      try {
+        if (ifcLoaderRef.current?.ifcManager) {
+          ifcLoaderRef.current.ifcManager.removeSubset(
+            0,
+            [expressID],
+            `hidden-${expressID}`
+          );
+        }
+        sceneRef.current.remove(hiddenSubset);
+        hiddenSubsetsRef.current.delete(expressID);
+      } catch (error) {
+        console.error("Error showing hidden object:", error);
+      }
+    }
+  }, []);
+
+  const handleContextMenuAction = useCallback(
+    (action: string) => {
+      if (!contextMenu.expressID) return;
+
+      switch (action) {
+        case "unselect":
+          unselectObject();
+          break;
+        case "hide":
+          hideObject(contextMenu.expressID);
+          break;
+        case "blacklist":
+          addToBlacklist(
+            contextMenu.expressID,
+            modelName,
+            contextMenu.name || "-"
+          );
+          break;
+      }
+
+      setContextMenu({ show: false, x: 0, y: 0, expressID: null, name: null });
+    },
+    [
+      contextMenu.expressID,
+      contextMenu.name,
+      unselectObject,
+      hideObject,
+      addToBlacklist,
+      modelName,
+    ]
+  );
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu({ show: false, x: 0, y: 0, expressID: null, name: null });
+    };
+
+    if (contextMenu.show) {
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [contextMenu.show]);
+
+  useEffect(() => {
+    loadBlacklist();
+  }, [loadBlacklist]);
+
+  useEffect(() => {
+    if (!pendingModelKey) return;
+    if (loadIFCModelRef.current) {
+      loadIFCModelRef.current(pendingModelKey).then(() => {
+        setPendingModelKey(null);
+      });
+    }
+  }, [pendingModelKey]);
+
+  useEffect(() => {
+    if (!currentModelKey) return;
+    if (loadIFCModelRef.current) {
+      loadIFCModelRef.current(currentModelKey);
+    }
+  }, [currentModelKey]);
+
+  // ... [ฟังก์ชันและ logic ส่วนอื่นๆ เหมือนเดิม ไม่ omitted ไม่สรุป]
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (!renderer || !renderer.domElement) return;
+
+    const handlePointerMove = async (event: PointerEvent) => {
+      if (!blacklistLoaded) return; // เพิ่มเช็คนี้
+      if (
+        !containerRef.current ||
+        !ifcModelRef.current ||
+        !cameraRef.current ||
+        !ifcLoaderRef.current
+      )
+        return;
+      const mouse = new THREE.Vector2();
+      const raycaster = new THREE.Raycaster();
+      const bounds = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+      mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, cameraRef.current);
+
+      let intersects: any[] = [];
+      try {
+        intersects = raycaster.intersectObject(ifcModelRef.current, true) || [];
+      } catch {
+        intersects = [];
+      }
+
+      let newHoverId: number | null = null;
+      let newHoverName: string | null = null;
+      if (
+        intersects.length > 0 &&
+        intersects[0]?.object &&
+        intersects[0]?.faceIndex !== undefined
+      ) {
+        const mesh = intersects[0].object as THREE.Mesh;
+        const faceIndex = intersects[0].faceIndex!;
+        const geometry = mesh.geometry;
+
+        const elementId = safeGetExpressId(geometry, faceIndex);
+        if (!blacklist.has(elementId) && !hiddenObjects.has(elementId)) {
+          newHoverId = elementId > 0 ? elementId : null;
+          if (newHoverId) {
+            const props = await safeGetItemProperties(newHoverId);
+            newHoverName = props.name || null;
+          }
+        } else {
+          newHoverId = null;
+          newHoverName = null;
+        }
+      }
+
+      if (hoverSubsetRef.current && sceneRef.current) {
+        safeRemoveSubset(hoverSubsetRef.current, sceneRef.current);
+        hoverSubsetRef.current = null;
+      }
+
+      if (newHoverId !== null && sceneRef.current) {
+        const subset = safeCreateSubset(newHoverId, sceneRef.current);
+        if (subset) {
+          hoverSubsetRef.current = subset;
+          renderer.domElement.style.cursor = "pointer";
+          setHoverID(newHoverId);
+        } else {
+          renderer.domElement.style.cursor = "";
+          setHoverID(null);
+        }
+      } else {
+        renderer.domElement.style.cursor = "";
+        setHoverID(null);
+      }
+    };
+
+    const handleRightClick = async (event: MouseEvent) => {
+      if (!blacklistLoaded) return; // เพิ่มเช็คนี้
+      event.preventDefault();
+      if (
+        !containerRef.current ||
+        !ifcModelRef.current ||
+        !cameraRef.current ||
+        !ifcLoaderRef.current
+      )
+        return;
+
+      const mouse = new THREE.Vector2();
+      const raycaster = new THREE.Raycaster();
+      const bounds = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+      mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, cameraRef.current);
+
+      let intersects: any[] = [];
+      try {
+        intersects = raycaster.intersectObject(ifcModelRef.current, true) || [];
+      } catch {
+        intersects = [];
+      }
+
+      if (intersects.length > 0) {
+        const intersect = intersects[0];
+        if (
+          intersect &&
+          intersect.object &&
+          intersect.faceIndex !== undefined
+        ) {
+          const mesh = intersect.object as THREE.Mesh;
+          const faceIndex = intersect.faceIndex!;
+          const geometry = mesh.geometry;
+          const elementId = safeGetExpressId(geometry, faceIndex);
+
+          let objectName: string | null = null;
+          if (
+            elementId > 0 &&
+            !blacklist.has(elementId) &&
+            !hiddenObjects.has(elementId)
+          ) {
+            const props = await safeGetItemProperties(elementId);
+            objectName = props.name || null;
+            setContextMenu({
+              show: true,
+              x: event.clientX,
+              y: event.clientY,
+              expressID: elementId,
+              name: objectName,
+            });
+          }
+        }
+      }
+    };
+
+    const handleDoubleClick = async (event: MouseEvent) => {
+      if (!blacklistLoaded) return; // เพิ่มเช็คนี้
+      if (event.button !== 0) return;
+      if (
+        !containerRef.current ||
+        !ifcModelRef.current ||
+        !cameraRef.current ||
+        !ifcLoaderRef.current
+      )
+        return;
+
+      const mouse = new THREE.Vector2();
+      const raycaster = new THREE.Raycaster();
+      const bounds = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+      mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, cameraRef.current);
+
+      let intersects: any[] = [];
+      try {
+        intersects = raycaster.intersectObject(ifcModelRef.current, true) || [];
+      } catch {
+        intersects = [];
+      }
+
+      if (intersects.length === 0) {
+        setSingleInfo({
+          show: false,
+          pos: null,
+          expressID: null,
+          name: null,
+          name2: null,
+        });
+        if (boundaryBoxLineRef.current && sceneRef.current) {
+          boundaryBoxLineRef.current.forEach((obj) => {
+            sceneRef.current.remove(obj);
+          });
+          boundaryBoxLineRef.current = null;
+        }
+        if (centerLineRef.current && sceneRef.current) {
+          sceneRef.current.remove(centerLineRef.current);
+          centerLineRef.current = null;
+        }
+        setHoverID(null);
+        await loadDefaultPreset();
+        return;
+      }
+
+      const intersect = intersects[0];
+      if (intersect && intersect.object && intersect.faceIndex !== undefined) {
+        const mesh = intersect.object as THREE.Mesh;
+        const faceIndex = intersect.faceIndex!;
+        const geometry = mesh.geometry;
+        const elementId = safeGetExpressId(geometry, faceIndex);
+
+        if (
+          !elementId ||
+          blacklist.has(elementId) ||
+          hiddenObjects.has(elementId)
+        )
+          return;
+
+        let bbox: THREE.Box3 | null = null;
+        if (ifcModelRef.current && elementId) {
+          bbox = computeBoundingBoxForExpressId(ifcModelRef.current, elementId);
+        }
+        if (bbox) {
+          const center = bbox.getCenter(new THREE.Vector3());
+          animateCameraToTargetAbsZoom(center, 5, 0.5);
+        }
+
+        let item = await safeGetItemProperties(elementId);
+
+        if (bbox) {
+          const center = bbox.getCenter(new THREE.Vector3());
+          setSingleInfo({
+            show: true,
+            pos: new THREE.Vector3(center.x, bbox.max.y, center.z),
+            expressID: elementId,
+            name: item.name,
+            name2: item.name2,
+          });
+        } else {
+          setSingleInfo({
+            show: true,
+            pos: null,
+            expressID: elementId,
+            name: item.name,
+            name2: item.name2,
+          });
+        }
+
+        if (boundaryBoxLineRef.current && sceneRef.current) {
+          boundaryBoxLineRef.current.forEach((obj) => {
+            sceneRef.current.remove(obj);
+          });
+          boundaryBoxLineRef.current = null;
+        }
+        if (centerLineRef.current && sceneRef.current) {
+          sceneRef.current.remove(centerLineRef.current);
+          centerLineRef.current = null;
+        }
+        if (bbox && sceneRef.current) {
+          const min = bbox.min,
+            max = bbox.max;
+          function vertex(x: number, y: number, z: number) {
+            return new THREE.Vector3(
+              x ? max.x : min.x,
+              y ? max.y : min.y,
+              z ? max.z : min.z
+            );
+          }
+          const edgePairs = [
+            [
+              [0, 0, 0],
+              [1, 0, 0],
+            ],
+            [
+              [1, 0, 0],
+              [1, 1, 0],
+            ],
+            [
+              [1, 1, 0],
+              [0, 1, 0],
+            ],
+            [
+              [0, 1, 0],
+              [0, 0, 0],
+            ],
+            [
+              [0, 0, 1],
+              [1, 0, 1],
+            ],
+            [
+              [1, 0, 1],
+              [1, 1, 1],
+            ],
+            [
+              [1, 1, 1],
+              [0, 1, 1],
+            ],
+            [
+              [0, 1, 1],
+              [0, 0, 1],
+            ],
+            [
+              [0, 0, 0],
+              [0, 0, 1],
+            ],
+            [
+              [1, 0, 0],
+              [1, 0, 1],
+            ],
+            [
+              [1, 1, 0],
+              [1, 1, 1],
+            ],
+            [
+              [0, 1, 0],
+              [0, 1, 1],
+            ],
+          ];
+          const points: number[] = [];
+          for (const [start, end] of edgePairs) {
+            const vStart = vertex(...start);
+            const vEnd = vertex(...end);
+            points.push(vStart.x, vStart.y, vStart.z, vEnd.x, vEnd.y, vEnd.z);
+          }
+          const lineGeometry = new LineGeometry();
+          lineGeometry.setPositions(points);
+          const lineMaterial = new LineMaterial({
+            color: 0xffff00,
+            linewidth: 2,
+            transparent: false,
+            depthTest: false,
+          });
+          lineMaterial.resolution.set(
+            rendererRef.current?.domElement.width || 1920,
+            rendererRef.current?.domElement.height || 1080
+          );
+          const line = new Line2(lineGeometry, lineMaterial);
+          line.renderOrder = 9999;
+          sceneRef.current.add(line);
+          boundaryBoxLineRef.current = [line];
+
+          const center = bbox.getCenter(new THREE.Vector3());
+          const top = new THREE.Vector3(center.x, max.y, center.z);
+          const bottom = new THREE.Vector3(center.x, min.y, center.z);
+          const centerLineGeom = new LineGeometry();
+          centerLineGeom.setPositions([
+            bottom.x,
+            bottom.y,
+            bottom.z,
+            top.x,
+            top.y,
+            top.z,
+          ]);
+          const centerLineMat = new LineMaterial({
+            color: 0xffffff,
+            linewidth: 0.006,
+            transparent: false,
+            depthTest: false,
+          });
+          centerLineMat.resolution.set(
+            rendererRef.current?.domElement.width || 1920,
+            rendererRef.current?.domElement.height || 1080
+          );
+          const centerLine = new Line2(centerLineGeom, centerLineMat);
+          centerLine.renderOrder = 10000;
+          sceneRef.current.add(centerLine);
+          centerLineRef.current = centerLine;
+        }
+
+        if (bimBoxEnabled) {
+          setBimPanelData({ loading: true, expressID: elementId });
+
+          try {
+            const res = await fetch("/api/get-bim-by-id", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: modelName,
+                expressID: elementId,
+              }),
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              setBimPanelData(data);
+            } else if (res.status === 404) {
+              setBimPanelData({
+                error: "not_found",
+                expressID: elementId,
+                message: "ไม่พบข้อมูล BIM สำหรับวัตถุนี้",
+              });
+            } else {
+              setBimPanelData({
+                error: "api_error",
+                expressID: elementId,
+                message: `เกิดข้อผิดพลาดในการดึงข้อมูล (${res.status})`,
+              });
+            }
+          } catch (e) {
+            setBimPanelData({
+              error: "network_error",
+              expressID: elementId,
+              message: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+            });
+          }
+        } else {
+          setBimPanelData(null);
+        }
+      }
+    };
+
+    renderer.domElement.addEventListener("pointermove", handlePointerMove);
+    renderer.domElement.addEventListener("dblclick", handleDoubleClick);
+    renderer.domElement.addEventListener("contextmenu", handleRightClick);
+
+    return () => {
+      renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+      renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
+      renderer.domElement.removeEventListener("contextmenu", handleRightClick);
+    };
+  }, [
+    bimBoxEnabled,
+    modelName,
+    setBimPanelData,
+    loadDefaultPreset,
+    blacklist,
+    blacklistLoaded,
+    hiddenObjects,
+  ]);
+
+  // ... [rest of code เหมือนเดิม ทุกส่วน]
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "absolute",
+        left: 0,
+        top: 0,
+        overflow: "hidden",
+      }}
+    >
+      {/* Context Menu */}
+      <ContextMenu
+        show={contextMenu.show}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        onUnselect={() => handleContextMenuAction("unselect")}
+        onHide={() => handleContextMenuAction("hide")}
+        onBlacklist={() => handleContextMenuAction("blacklist")}
+        onClose={() =>
+          setContextMenu({ ...contextMenu, show: false })
+        }
+      />
+
+      <div
+        ref={infoBoxRef}
+        style={{
+          position: "absolute",
+          zIndex: 1201,
+          pointerEvents: "auto",
+          background: "rgba(0,0,0,0.28)",
+          color: "#fff",
+          borderRadius: 10,
+          padding: 10,
+          fontWeight: 600,
+          display: singleInfo.show ? "block" : "none",
+          userSelect: "text",
+        }}
+      >
+        <div style={{ fontSize: "100%" }}>
+          {singleInfo.expressID != null ? singleInfo.expressID : "-"}
+        </div>
+        <div
+          style={{
+            color: "#ffd300",
+            fontSize: "85%",
+            fontWeight: 400,
+            marginTop: "2px",
+            wordBreak: "break-word",
+            whiteSpace: "normal",
+            userSelect: "text",
+          }}
+        >
+          {singleInfo.name || ""}
+        </div>
+      </div>
+      <svg
+        ref={svgRef}
+        style={{
+          position: "absolute",
+          zIndex: 1200,
+          pointerEvents: "none",
+          width: "100%",
+          height: "100%",
+          left: 0,
+          top: 0,
+        }}
+      >
+        <line
+          ref={lineRef}
+          x1={0}
+          y1={0}
+          x2={0}
+          y2={0}
+          stroke="#ffffff"
+          strokeWidth={2}
+        />
+      </svg>
+    </div>
+  );
+};
+
+export default ThreeScene;
